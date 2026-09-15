@@ -10,7 +10,8 @@ axios.interceptors.request.use((config) => {
 		const token = localStorage.getItem('token')
 		if (token && token !== 'null' && token !== 'undefined') {
 			config.headers = config.headers || {}
-			config.headers.Authorization = 'Bearer ' + token
+				const value = token.replace(/^Bearer\s+/i, '').trim()
+				if (value) config.headers.Authorization = 'Bearer ' + value
 		}
 	}catch(e){ /* ignore */ }
 	return config

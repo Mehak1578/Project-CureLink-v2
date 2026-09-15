@@ -27,7 +27,9 @@ app.use('/api/analysis', require('./routes/analysis'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/messages', require('./routes/messages'));
 app.use('/api/doctors', require('./routes/doctors'));
+app.use('/api/admin', require('./routes/admin'));
 app.use('/api/dev', require('./routes/dev'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 app.get('/', (req, res) => res.send({ message: 'CureLink API running' }));
 

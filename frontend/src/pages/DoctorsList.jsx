@@ -85,7 +85,7 @@ export default function DoctorsList() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-slate-900 truncate">
-                      Dr. {d.user?.name || 'Doctor'}
+                      Dr. {(d.user?.name || 'Doctor').replace(/^(Dr\.\s*)+/i, '')}
                     </h3>
                     <span className="medical-badge mt-1">{d.specialization}</span>
                   </div>
@@ -100,7 +100,7 @@ export default function DoctorsList() {
                 <div className="flex items-center gap-4 text-sm text-slate-500 mb-3">
                   <span>{d.experience || 0} yrs experience</span>
                   <span className="text-slate-300">·</span>
-                  <span className="font-medium text-slate-700">${d.fees || '—'} fee</span>
+                  <span className="font-medium text-slate-700">₹{d.fees || '—'} fee</span>
                 </div>
 
                 {d.bio && (

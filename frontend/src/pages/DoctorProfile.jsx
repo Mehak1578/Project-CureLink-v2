@@ -72,7 +72,7 @@ export default function DoctorProfile(){
             
             <div className="flex-1">
               <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-                Dr. {doctor.user?.name || 'Doctor'}
+                Dr. {(doctor.user?.name || 'Doctor').replace(/^(Dr\.\s*)+/i, '')}
               </h1>
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-sky-100 text-sky-700">
@@ -99,7 +99,7 @@ export default function DoctorProfile(){
                   <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-2xl font-bold text-emerald-600">${doctor.fees || '—'}</span>
+                  <span className="text-2xl font-bold text-emerald-600">₹{doctor.fees || '—'}</span>
                   <span className="text-slate-600">per consultation</span>
                 </div>
               </div>

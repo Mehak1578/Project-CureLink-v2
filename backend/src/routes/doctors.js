@@ -5,7 +5,9 @@ const controller = require('../controllers/doctorController');
 
 const router = express.Router();
 
-// POST /api/doctors/profile - create or update doctor profile (doctor role)
+// Doctor-owned profile routes must precede the dynamic /:id route.
+router.get('/me/profile', auth, roles('doctor'), controller.getOwnProfile);
+router.put('/me/profile', auth, roles('doctor'), controller.updateOwnProfile);
 router.post('/profile', auth, roles('doctor'), controller.createProfile);
 
 // GET /api/doctors - public list

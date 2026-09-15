@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from 'react'
+import React, { useContext, useEffect, useState } from 'react'
 import axios from '../api'
 import { Link } from 'react-router-dom'
+import { AuthContext } from '../context/AuthContext'
 
 export default function MyReports() {
+  const { user } = useContext(AuthContext)
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   const load = async () => {
+    if (!user) return
     setLoading(true)
     setError(null)
     try {
@@ -15,16 +18,41 @@ export default function MyReports() {
       setReports(res.data)
     } catch (err) {
       console.error('Failed to load reports:', err)
-      const msg = err.response?.status === 401
+      const isUnauth = err.response?.status === 401
+      const msg = isUnauth
         ? 'Please log in to view your reports.'
         : 'Could not load reports. The server may be starting up — please try again.'
-      setError(msg)
+      setError({ message: msg, isUnauth })
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (user) load()
+    else {
+      setLoading(false)
+    }
+  }, [user])
+
+  if (!user) {
+    return (
+      <div className="page-shell">
+        <div className="page-body">
+          <div className="empty-state max-w-sm mx-auto">
+            <div className="empty-state-icon bg-sky-50">
+              <svg className="w-6 h-6 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h3 className="text-base font-semibold text-slate-900">Sign in required</h3>
+            <p className="text-sm text-slate-500">Please log in to view your reports.</p>
+            <Link to="/login" className="btn btn-primary btn-sm mt-2">Sign in</Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
@@ -36,18 +64,32 @@ export default function MyReports() {
   }
 
   if (error) {
+    const isUnauth = typeof error === 'object' && error.isUnauth
+    const msg = typeof error === 'object' ? error.message : error
     return (
       <div className="page-shell">
         <div className="page-body">
           <div className="empty-state max-w-sm mx-auto">
-            <div className="empty-state-icon bg-red-50">
-              <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+            <div className={`empty-state-icon ${isUnauth ? 'bg-sky-50' : 'bg-red-50'}`}>
+              {isUnauth ? (
+                <svg className="w-6 h-6 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
             </div>
-            <h3 className="text-base font-semibold text-slate-900">Failed to load reports</h3>
-            <p className="text-sm text-slate-500">{error}</p>
-            <button onClick={load} className="btn btn-primary btn-sm mt-2">Try again</button>
+            <h3 className="text-base font-semibold text-slate-900">
+              {isUnauth ? 'Sign in required' : 'Failed to load reports'}
+            </h3>
+            <p className="text-sm text-slate-500">{msg}</p>
+            {isUnauth ? (
+              <Link to="/login" className="btn btn-primary btn-sm mt-2">Sign in</Link>
+            ) : (
+              <button onClick={load} className="btn btn-primary btn-sm mt-2">Try again</button>
+            )}
           </div>
         </div>
       </div>

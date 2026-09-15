@@ -17,6 +17,7 @@ export default function BookAppointment() {
     reason: ''
   })
   const [loading, setLoading] = useState(false)
+  const [availableTimes, setAvailableTimes] = useState(['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00', '17:00'])
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
 
@@ -40,6 +41,22 @@ export default function BookAppointment() {
       navigate('/login')
     }
   }, [user, navigate])
+
+  useEffect(() => {
+    if (!formData.doctorId || !formData.date) return
+    const loadAvailableTimes = async () => {
+      try {
+        const res = await axios.get('/api/appointments/available', {
+          params: { doctorId: formData.doctorId, date: formData.date }
+        })
+        setAvailableTimes(res.data.slots)
+        setFormData(prev => prev.time && res.data.slots.includes(prev.time) ? prev : { ...prev, time: '' })
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    loadAvailableTimes()
+  }, [formData.doctorId, formData.date])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -149,12 +166,12 @@ export default function BookAppointment() {
                   <option value="">Choose a doctor...</option>
                   {selectedDoctor && !doctors.length && (
                     <option value={selectedDoctor._id}>
-                      Dr. {selectedDoctor.user?.name} - {selectedDoctor.specialization}
+                      Dr. {(selectedDoctor.user?.name || 'Doctor').replace(/^(Dr\.\s*)+/i, '')} - {selectedDoctor.specialization}
                     </option>
                   )}
                   {doctors.map(doctor => (
                     <option key={doctor._id} value={doctor._id}>
-                      Dr. {doctor.user?.name} - {doctor.specialization}
+                      Dr. {(doctor.user?.name || 'Doctor').replace(/^(Dr\.\s*)+/i, '')} - {doctor.specialization}
                     </option>
                   ))}
                 </select>
@@ -191,14 +208,9 @@ export default function BookAppointment() {
                   className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:border-sky-500 focus:ring-2 focus:ring-sky-200 outline-none transition-all"
                 >
                   <option value="">Select a time...</option>
-                  <option value="09:00">09:00 AM</option>
-                  <option value="10:00">10:00 AM</option>
-                  <option value="11:00">11:00 AM</option>
-                  <option value="12:00">12:00 PM</option>
-                  <option value="14:00">02:00 PM</option>
-                  <option value="15:00">03:00 PM</option>
-                  <option value="16:00">04:00 PM</option>
-                  <option value="17:00">05:00 PM</option>
+                  {availableTimes.map(time => (
+                    <option key={time} value={time}>{time === '12:00' ? '12:00 PM' : `${time.slice(0, 2) > 12 ? String(Number(time.slice(0, 2)) - 12).padStart(2, '0') : time.slice(0, 2)}:${time.slice(3)} ${Number(time.slice(0, 2)) >= 12 ? 'PM' : 'AM'}`}</option>
+                  ))}
                 </select>
               </div>
 
@@ -269,7 +281,7 @@ export default function BookAppointment() {
                     {selectedDoctor.user?.name?.charAt(0)?.toUpperCase() || 'D'}
                   </div>
                   <h4 className="font-bold text-slate-900 mb-1">
-                    Dr. {selectedDoctor.user?.name}
+                    Dr. {(selectedDoctor.user?.name || 'Doctor').replace(/^(Dr\.\s*)+/i, '')}
                   </h4>
                   <p className="text-sm text-sky-600 font-medium">{selectedDoctor.specialization}</p>
                 </div>
@@ -284,7 +296,7 @@ export default function BookAppointment() {
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    ${selectedDoctor.fees || '—'} consultation
+                    ₹{selectedDoctor.fees || '—'} consultation
                   </div>
                 </div>
               </div>

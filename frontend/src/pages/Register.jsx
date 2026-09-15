@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react'
-import axios from 'axios'
+import axios from '../api'
 import { Link, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../context/AuthContext'
 
@@ -9,6 +9,7 @@ export default function Register(){
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState('patient')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -29,10 +30,26 @@ export default function Register(){
     setLoading(true)
 
     try{
-      const res = await axios.post(import.meta.env.VITE_API_URL + '/api/auth/register', { name, email, password })
+      const res = await axios.post('/api/auth/register', { name, email, password, role })
       localStorage.setItem('token', res.data.token)
-      setUser(res.data.user)
-      navigate('/')
+      const user = res.data.user
+      if (!user || !user.role) {
+        setError('Registration failed: Account has no valid role assigned.')
+        localStorage.removeItem('token')
+        return
+      }
+      setUser(user)
+      if (user.role === 'admin') {
+        navigate('/admin/dashboard')
+      } else if (user.role === 'doctor') {
+        navigate('/doctor/dashboard')
+      } else if (user.role === 'patient') {
+        navigate('/patient/dashboard')
+      } else {
+        setError(`Registration failed: Unknown role '${user.role}'`)
+        localStorage.removeItem('token')
+        setUser(null)
+      }
     }catch(err){
       setError(err.response?.data?.msg || 'Registration failed. Email might already exist.')
     } finally {
@@ -101,6 +118,25 @@ export default function Register(){
                   required
                 />
               </div>
+            </div>
+
+            {/* Password Input */}
+            {/* Account Type */}
+            <div>
+              <label htmlFor="role" className="block text-sm font-medium text-slate-700 mb-2">
+                Account Type
+              </label>
+              <select
+                id="role"
+                name="role"
+                value={role}
+                onChange={e => setRole(e.target.value)}
+                className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:border-sky-500 focus:ring-2 focus:ring-sky-200 outline-none transition-all bg-white"
+              >
+                <option value="patient">Patient</option>
+                <option value="doctor">Doctor</option>
+                <option value="admin">Admin</option>
+              </select>
             </div>
 
             {/* Password Input */}

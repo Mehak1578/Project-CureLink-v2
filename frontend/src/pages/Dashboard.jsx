@@ -1,6 +1,7 @@
-import React, { useContext } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useContext, useEffect, useState } from 'react'
+import { Link, Navigate } from 'react-router-dom'
 import { AuthContext } from '../context/AuthContext'
+import axios from '../api'
 
 const CheckIcon = () => (
   <svg className="w-5 h-5 text-teal-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -74,8 +75,234 @@ const benefits = [
   'No hidden consultation fees',
 ]
 
+const DashboardIcon = ({ children, className = 'w-5 h-5' }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={children} />
+  </svg>
+)
+
+const formatDate = date => new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+const formatTime = date => new Date(date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+const doctorName = appointment => appointment.doctor?.user?.name || appointment.doctor?.name || 'Doctor'
+const doctorSpecialization = appointment => appointment.doctor?.specialization || 'Specialist'
+
+const statusClass = (status) => {
+  switch (String(status).toLowerCase()) {
+    case 'confirmed':
+      return 'status-confirmed'
+    case 'pending':
+    case 'requested':
+      return 'status-pending'
+    case 'completed':
+      return 'status-completed'
+    case 'cancelled':
+      return 'status-cancelled'
+    default:
+      return 'status-pending'
+  }
+}
+
+const appointmentCardClass = (status) => {
+  if (status === 'cancelled') {
+    return 'block rounded-xl border border-red-100 bg-red-50/60 p-4 transition hover:border-red-300'
+  }
+  return 'block rounded-xl border border-teal-100 bg-teal-50/60 p-4 transition hover:border-teal-300'
+}
+
+function FeaturedDoctors() {
+  const [doctors, setDoctors] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    axios.get('/api/doctors')
+      .then((res) => {
+        if (active) {
+          const unique = []
+          const seen = new Set()
+          for (const doc of res.data || []) {
+            const id = String(doc._id || doc.id)
+            if (id && !seen.has(id)) {
+              seen.add(id)
+              unique.push(doc)
+            }
+          }
+          setDoctors(unique)
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  if (loading || !doctors.length) return null
+
+  return (
+    <section className="bg-slate-50/80 py-20 border-t border-slate-100">
+      <div className="container-max">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+          <div>
+            <span className="text-sm font-semibold text-teal-600 uppercase tracking-wider">Our Healthcare Professionals</span>
+            <h2 className="text-3xl font-bold text-slate-900 mt-2">Verified Doctors</h2>
+            <p className="text-slate-500 max-w-lg mt-1 text-sm">Browse approved specialists ready to provide quality healthcare.</p>
+          </div>
+          <Link to="/doctors" className="inline-flex items-center gap-1.5 text-sm font-semibold text-sky-600 hover:text-sky-700">
+            View all doctors <ArrowRight />
+          </Link>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {doctors.slice(0, 6).map((doctor) => {
+            const name = doctor.user?.name || doctor.name || 'Doctor'
+            const avatar = doctor.user?.avatar
+            return (
+              <div key={doctor._id} className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col">
+                <div className="flex items-start gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-sky-100 text-sky-700 font-bold text-xl flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {avatar ? <img src={avatar} alt={name} className="w-full h-full object-cover" /> : name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="font-bold text-slate-900 truncate">Dr. {name.replace(/^(Dr\.\s*)+/i, '')}</h3>
+                      <span className="text-emerald-500 flex-shrink-0" title="Verified Doctor">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-sky-600 mt-0.5">{doctor.specialization || 'General Specialist'}</p>
+                    <p className="text-xs text-slate-500 mt-1">{doctor.experience ? `${doctor.experience} yrs exp.` : 'Experienced'} • {doctor.fees ? `₹${doctor.fees}` : 'Consultation'}</p>
+                  </div>
+                </div>
+                {doctor.bio && (
+                  <p className="text-xs text-slate-500 mt-4 line-clamp-2 leading-relaxed flex-1">{doctor.bio}</p>
+                )}
+                <div className="mt-5 pt-4 border-t border-slate-100 flex gap-2">
+                  <Link to={`/doctors/${doctor._id}`} className="btn btn-ghost btn-sm flex-1 text-center text-xs">
+                    View Profile
+                  </Link>
+                  <Link to="/book-appointment" state={{ doctor }} className="btn btn-primary btn-sm flex-1 text-center text-xs">
+                    Book Appointment
+                  </Link>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function EmptyDashboardCard({ icon, title, description, action, to }) {
+  return (
+    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-5">
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600"><DashboardIcon>{icon}</DashboardIcon></div>
+      <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+      <p className="mt-1 text-sm leading-relaxed text-slate-500">{description}</p>
+      {action && <Link to={to} className="btn btn-primary btn-sm mt-4">{action}</Link>}
+    </div>
+  )
+}
+
+function PatientDashboard({ user }) {
+  const [appointments, setAppointments] = useState([])
+  const [reports, setReports] = useState([])
+  const [notifications, setNotifications] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const loadDashboard = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const [appointmentsResponse, reportsResponse, notificationsResponse] = await Promise.all([
+        axios.get('/api/appointments/my'),
+        axios.get('/api/reports/my'),
+        axios.get('/api/notifications').catch(() => ({ data: [] })),
+      ])
+      setAppointments(appointmentsResponse.data || [])
+      setReports(reportsResponse.data || [])
+      setNotifications(notificationsResponse.data || [])
+    } catch (requestError) {
+      setError(requestError.response?.status === 401 ? 'Please sign in again to view your dashboard.' : 'Could not load your healthcare data right now.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadDashboard() }, [user])
+
+  if (loading) return <div className="page-loading"><div className="spinner" /><span>Loading your dashboard...</span></div>
+  if (error) return <div className="page-shell"><div className="page-body"><div className="empty-state max-w-md mx-auto"><div className="empty-state-icon bg-red-50"><DashboardIcon className="text-red-500">M12 8v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0</DashboardIcon></div><h2 className="text-base font-semibold text-slate-900">Dashboard unavailable</h2><p className="text-sm text-slate-500">{error}</p><button type="button" onClick={loadDashboard} className="btn btn-primary btn-sm mt-2">Try again</button></div></div></div>
+
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000)
+  const upcoming = appointments.filter(appointment => new Date(appointment.date) >= now && appointment.status !== 'cancelled' && appointment.status !== 'rejected').sort((a, b) => new Date(a.date) - new Date(b.date))
+  const today = appointments.filter(appointment => {
+    const d = new Date(appointment.date)
+    return d >= startOfToday && d < endOfToday
+  }).sort((a, b) => new Date(a.date) - new Date(b.date))
+  const nextAppointment = upcoming[0]
+  const recentAppointments = appointments.filter(appointment => new Date(appointment.date) < now).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3)
+  const recentReports = reports.slice(0, 3)
+  const activity = [
+    ...recentAppointments.map(appointment => ({ date: new Date(appointment.updatedAt || appointment.date), label: `${doctorName(appointment)} appointment`, detail: appointment.status })),
+    ...recentReports.map(report => ({ date: new Date(report.createdAt || report.uploadedAt), label: report.filename || report.fileName || 'Medical report uploaded', detail: 'Medical record' })),
+  ].sort((a, b) => b.date - a.date).slice(0, 5)
+  const firstName = (user.name || 'there').split(' ')[0]
+
+  return <div className="page-shell"><div className="bg-gradient-to-r from-sky-700 to-teal-600 text-white"><div className="container-max py-10"><p className="text-sm font-medium text-sky-100">Patient dashboard</p><h1 className="mt-2 text-3xl font-bold">Good to see you, {firstName}</h1><p className="mt-2 max-w-xl text-sm text-sky-100">Keep track of your appointments and medical records in one secure place.</p></div></div><div className="container-max py-8">
+    <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4"><Link to="/book-appointment" className="btn btn-primary h-auto min-h-16 flex-col items-start gap-1 p-4 text-left"><DashboardIcon className="h-5 w-5">M12 4v16m8-8H4</DashboardIcon><span>Book Appointment</span></Link><Link to="/doctors" className="btn btn-secondary h-auto min-h-16 flex-col items-start gap-1 p-4 text-left"><DashboardIcon className="h-5 w-5">M16 7a4 4 0 1 1-8 0M5 21a7 7 0 0 1 14 0</DashboardIcon><span>Find Doctor</span></Link><Link to="/upload-report" className="btn btn-secondary h-auto min-h-16 flex-col items-start gap-1 p-4 text-left"><DashboardIcon className="h-5 w-5">M12 4v16m8-8H4</DashboardIcon><span>Upload Report</span></Link><Link to="/appointments" className="btn btn-secondary h-auto min-h-16 flex-col items-start gap-1 p-4 text-left"><DashboardIcon className="h-5 w-5">M8 7V3m8 4V3m-9 8h10m-9 8h10</DashboardIcon><span>View Appointments</span></Link></div>
+    <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]"><section className="card"><div className="mb-5 flex items-start justify-between gap-4"><div><h2 className="text-lg font-bold text-slate-900">Upcoming appointment</h2><p className="mt-1 text-sm text-slate-500">Your next scheduled visit</p></div><Link to="/appointments" className="text-sm font-semibold text-sky-600 hover:text-sky-700">View all</Link></div>{nextAppointment ? <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-600 text-lg font-bold text-white">{doctorName(nextAppointment).slice(0, 1).toUpperCase()}</div><div><h3 className="font-semibold text-slate-900">{doctorName(nextAppointment)}</h3><p className="text-sm text-slate-500">{doctorSpecialization(nextAppointment)}</p></div></div><span className={`status-badge ${nextAppointment.status === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{nextAppointment.status}</span></div><div className="mt-5 grid gap-3 text-sm sm:grid-cols-2"><div className="flex items-center gap-2 text-slate-600"><DashboardIcon className="h-4 w-4 text-sky-600">M8 7V3m8 4V3m-9 8h10m-9 8h10</DashboardIcon>{formatDate(nextAppointment.date)}</div><div className="flex items-center gap-2 text-slate-600"><DashboardIcon className="h-4 w-4 text-sky-600">M12 6v6l4 2</DashboardIcon>{formatTime(nextAppointment.date)}</div></div><div className="mt-5 flex flex-wrap gap-2"><Link to="/appointments" className="btn btn-primary btn-sm">Manage appointment</Link><Link to={`/doctors/${nextAppointment.doctorId || nextAppointment.doctor?._id || nextAppointment.doctor?.user?._id}`} className="btn btn-secondary btn-sm">View doctor</Link></div></div> : <EmptyDashboardCard icon="M8 7V3m8 4V3m-9 8h10m-9 8h10" title="No upcoming appointments" description="Schedule a visit with a verified CureLink doctor when you are ready." action="Book Appointment" to="/book-appointment" />}</section>
+      <section className="card">
+        <h2 className="text-lg font-bold text-slate-900">Today</h2>
+        <p className="mt-1 text-sm text-slate-500">Visits scheduled for today</p>
+        {today.length ? (
+          <div className="mt-5 space-y-3">
+            {today.map(appointment => (
+              <Link
+                key={appointment._id}
+                to="/appointments"
+                className={appointmentCardClass(appointment.status)}
+              >
+                <p className="font-semibold text-slate-900">{doctorName(appointment)}</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {formatTime(appointment.date)} · {doctorSpecialization(appointment)}
+                  {appointment.reason && ` · ${appointment.reason}`}
+                </p>
+                <span className={`mt-3 inline-block status-badge ${statusClass(appointment.status)}`}>
+                  {appointment.status}
+                </span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">
+            No appointments scheduled for today.
+          </div>
+        )}
+      </section>
+    </div>
+    <div className="mt-6 grid gap-6 lg:grid-cols-3"><section className="card"><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-bold text-slate-900">Recent medical reports</h2><Link to="/my-reports" className="text-sm font-semibold text-sky-600">View all</Link></div>{recentReports.length ? <div className="space-y-3">{recentReports.map(report => <Link key={report._id} to={`/analyze/${report._id}`} className="flex items-center gap-3 rounded-lg border border-slate-100 p-3 transition hover:bg-sky-50"><div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-50 text-sky-600"><DashboardIcon className="h-4 w-4">M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.6L19 7.4V19a2 2 0 0 1-2 2</DashboardIcon></div><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{report.filename || report.fileName || 'Medical report'}</p><p className="mt-1 text-xs text-slate-400">{new Date(report.createdAt || report.uploadedAt).toLocaleDateString()}</p></div></Link>)}</div> : <EmptyDashboardCard icon="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.6L19 7.4V19a2 2 0 0 1-2 2" title="No medical reports yet" description="Upload a report to keep your health records organized." action="Upload Report" to="/upload-report" />}</section>
+      <section className="card"><h2 className="mb-4 text-lg font-bold text-slate-900">Active prescriptions</h2><EmptyDashboardCard icon="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm3 5h4m-4 4h4m-4 4h2" title="No prescriptions recorded" description="Prescriptions will appear here when they are added to your CureLink record." /></section>
+      <section className="card"><h2 className="mb-4 text-lg font-bold text-slate-900">Notifications</h2>{notifications.length ? <div className="space-y-3 max-h-60 overflow-y-auto">{notifications.slice(0, 5).map(n => <div key={n._id} className="p-3 bg-sky-50/60 border border-sky-100 rounded-lg"><p className="font-semibold text-slate-900 text-xs">{n.title}</p><p className="text-xs text-slate-600 mt-1">{n.message}</p></div>)}</div> : <EmptyDashboardCard icon="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5" title="No new notifications" description="Important appointment and record updates will appear here." />}</section></div>
+    <div className="mt-6 grid gap-6 lg:grid-cols-[1.25fr_0.75fr]"><section className="card"><h2 className="text-lg font-bold text-slate-900">Recent activity</h2><p className="mt-1 text-sm text-slate-500">Your latest appointments and records</p>{activity.length ? <div className="mt-5 divide-y divide-slate-100">{activity.map((item, index) => <div key={`${item.label}-${item.date.toISOString()}-${index}`} className="flex items-center justify-between gap-4 py-3 first:pt-0"><div><p className="text-sm font-medium text-slate-800">{item.label}</p><p className="mt-1 text-xs text-slate-400">{item.detail}</p></div><time className="flex-shrink-0 text-xs text-slate-400">{item.date.toLocaleDateString()}</time></div>)}</div> : <div className="mt-5 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">Your healthcare activity will appear here as you use CureLink.</div>}</section><section className="card"><h2 className="text-lg font-bold text-slate-900">Health record timeline</h2><p className="mt-1 text-sm text-slate-500">A summary of your records</p><div className="mt-5 space-y-3">{reports.length ? <div className="rounded-lg bg-sky-50 p-4 text-sm text-sky-800">{reports.length} medical report{reports.length === 1 ? '' : 's'} stored in your records.</div> : <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No health records have been uploaded yet.</div>}{appointments.length ? <div className="rounded-lg bg-teal-50 p-4 text-sm text-teal-800">{appointments.length} appointment{appointments.length === 1 ? '' : 's'} in your care history.</div> : <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No appointment history yet.</div>}</div></section></div>
+    <div className="mt-8">
+      <FeaturedDoctors />
+    </div>
+  </div></div>
+}
+
 export default function Dashboard() {
   const { user } = useContext(AuthContext)
+
+  if (user) {
+    if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />
+    if (user.role === 'doctor') return <Navigate to="/doctor/dashboard" replace />
+    return <PatientDashboard user={user} />
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -165,6 +392,9 @@ export default function Dashboard() {
           ))}
         </div>
       </section>
+
+      {/* ── FEATURED VERIFIED DOCTORS ── */}
+      <FeaturedDoctors />
 
       {/* ── HOW IT WORKS ── */}
       <section className="bg-slate-50 py-20">

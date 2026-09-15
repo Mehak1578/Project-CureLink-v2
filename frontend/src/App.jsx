@@ -12,7 +12,12 @@ import DoctorProfile from './pages/DoctorProfile'
 import Dashboard from './pages/Dashboard'
 import Appointments from './pages/Appointments'
 import BookAppointment from './pages/BookAppointment'
+import Profile from './pages/Profile'
+import Settings from './pages/Settings'
+import DoctorPortal from './pages/DoctorPortal'
+import AdminPortal from './pages/AdminPortal'
 import Navbar from './components/Navbar'
+import ProtectedRoute from './components/ProtectedRoute'
 import { ToastProvider } from './context/ToastContext'
 
 export default function App(){
@@ -26,14 +31,34 @@ export default function App(){
             <Route path="/register" element={<Register/>} />
             <Route path="/doctors" element={<DoctorsList/>} />
             <Route path="/doctors/:id" element={<DoctorProfile/>} />
-            <Route path="/book-appointment" element={<BookAppointment/>} />
-            <Route path="/dashboard" element={<Dashboard/>} />
-            <Route path="/appointments" element={<Appointments/>} />
-            <Route path="/upload-report" element={<UploadReport/>} />
-            <Route path="/my-reports" element={<MyReports/>} />
-            <Route path="/analyze/:id" element={<AnalyzeReport/>} />
-            <Route path="/chat" element={<Chat/>} />
-            <Route path="/payments" element={<Payments/>} />
+            
+            {/* Patient Routes */}
+            <Route path="/book-appointment" element={<ProtectedRoute allowedRoles={['patient']}><BookAppointment/></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['patient']}><Dashboard/></ProtectedRoute>} />
+            <Route path="/patient/dashboard" element={<ProtectedRoute allowedRoles={['patient']}><Dashboard/></ProtectedRoute>} />
+            <Route path="/appointments" element={<ProtectedRoute allowedRoles={['patient']}><Appointments/></ProtectedRoute>} />
+            <Route path="/upload-report" element={<ProtectedRoute allowedRoles={['patient']}><UploadReport/></ProtectedRoute>} />
+            <Route path="/my-reports" element={<ProtectedRoute allowedRoles={['patient']}><MyReports/></ProtectedRoute>} />
+            <Route path="/analyze/:id" element={<ProtectedRoute allowedRoles={['patient']}><AnalyzeReport/></ProtectedRoute>} />
+            <Route path="/payments" element={<ProtectedRoute allowedRoles={['patient']}><Payments/></ProtectedRoute>} />
+
+            {/* Doctor Routes */}
+            <Route path="/doctor/dashboard" element={<ProtectedRoute allowedRoles={['doctor']}><DoctorPortal/></ProtectedRoute>} />
+            <Route path="/doctor/appointments" element={<ProtectedRoute allowedRoles={['doctor']}><DoctorPortal/></ProtectedRoute>} />
+            <Route path="/doctor/patients" element={<ProtectedRoute allowedRoles={['doctor']}><DoctorPortal/></ProtectedRoute>} />
+            <Route path="/doctor/profile" element={<ProtectedRoute allowedRoles={['doctor']}><DoctorPortal/></ProtectedRoute>} />
+            <Route path="/doctor/availability" element={<ProtectedRoute allowedRoles={['doctor']}><DoctorPortal/></ProtectedRoute>} />
+
+            {/* Admin Routes */}
+            <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin']}><AdminPortal/></ProtectedRoute>} />
+            <Route path="/admin/:section" element={<ProtectedRoute allowedRoles={['admin']}><AdminPortal/></ProtectedRoute>} />
+
+            {/* Shared Authenticated Routes */}
+            <Route path="/profile" element={<ProtectedRoute allowedRoles={['patient', 'doctor', 'admin']}><Profile/></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute allowedRoles={['patient', 'doctor', 'admin']}><Settings/></ProtectedRoute>} />
+            <Route path="/chat" element={<ProtectedRoute allowedRoles={['patient', 'doctor']}><Chat/></ProtectedRoute>} />
+
+            {/* Public Root Route */}
             <Route path="/" element={<Dashboard/>} />
           </Routes>
         </main>

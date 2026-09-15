@@ -12,6 +12,7 @@ module.exports = async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ msg: 'User not found, please login again' });
     }
+    if (!req.user.isActive) return res.status(403).json({ msg: 'This account is deactivated' });
     
     next();
   } catch (err) {

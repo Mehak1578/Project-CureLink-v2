@@ -5,26 +5,12 @@ const Doctor = require('./models/Doctor');
 require('dotenv').config();
 
 const doctors = [
-  { name: "Dr. Priya Sharma", specialization: "Cardiologist", experience: 8 },
-  { name: "Dr. Rajesh Kumar", specialization: "Dermatologist", experience: 5 },
-  { name: "Dr. Ananya Verma", specialization: "Pediatrician", experience: 6 },
-  { name: "Dr. Mohan Gupta", specialization: "General Physician", experience: 10 },
-  { name: "Dr. Neha Kaur", specialization: "Neurologist", experience: 7 },
-  { name: "Dr. Vivek Agarwal", specialization: "Orthopedic Surgeon", experience: 12 },
-  { name: "Dr. Sana Fatima", specialization: "Gynecologist", experience: 9 },
-  { name: "Dr. Rohan Deshmukh", specialization: "ENT Specialist", experience: 6 },
-  { name: "Dr. Isha Mehta", specialization: "Psychiatrist", experience: 5 },
-  { name: "Dr. Harsh Patel", specialization: "Dentist", experience: 4 },
-  { name: "Dr. Kavita Saxena", specialization: "Endocrinologist", experience: 11 },
-  { name: "Dr. Aditya Nair", specialization: "Pulmonologist", experience: 8 },
-  { name: "Dr. Sneha Choudhary", specialization: "Oncologist", experience: 6 },
-  { name: "Dr. Karan Bhatia", specialization: "Nephrologist", experience: 9 },
-  { name: "Dr. Ritika Singh", specialization: "Radiologist", experience: 7 },
-  { name: "Dr. Arjun Malhotra", specialization: "Urologist", experience: 13 },
-  { name: "Dr. Pooja Jain", specialization: "Gastroenterologist", experience: 8 },
-  { name: "Dr. Sameer Qureshi", specialization: "Dermatologist", experience: 6 },
-  { name: "Dr. Meena Joshi", specialization: "General Physician", experience: 15 },
-  { name: "Dr. Ashwin Rao", specialization: "Cardiologist", experience: 10 }
+  { name: "Dr. Priya Sharma", specialization: "Cardiologist", experience: 8, fees: 800 },
+  { name: "Dr. Rajesh Kumar", specialization: "Dermatologist", experience: 5, fees: 600 },
+  { name: "Dr. Ananya Verma", specialization: "Pediatrician", experience: 6, fees: 700 },
+  { name: "Dr. Mohan Gupta", specialization: "General Physician", experience: 10, fees: 500 },
+  { name: "Dr. Neha Kaur", specialization: "Neurologist", experience: 7, fees: 900 },
+  { name: "Dr. Vivek Agarwal", specialization: "Orthopedic Surgeon", experience: 12, fees: 850 }
 ];
 
 const seedDoctors = async () => {
@@ -71,7 +57,7 @@ const seedDoctors = async () => {
         user: user._id,
         specialization: doc.specialization,
         experience: doc.experience,
-        fees: 500,
+        fees: doc.fees,
         verified: true,
         bio: `Experienced ${doc.specialization} with ${doc.experience} years of practice.`
       });

@@ -50,6 +50,7 @@ export default function Appointments() {
 
   const fmtDate = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   const fmtTime = (d) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  const getDoctorId = (appointment) => appointment.doctorId || appointment.doctor?._id || appointment.doctor?.user?._id
 
   if (loading) {
     return (
@@ -148,7 +149,7 @@ export default function Appointments() {
                       <td><span className={statusClass(a.status)}>{a.status}</span></td>
                       <td>
                         <div className="flex items-center gap-2">
-                          <Link to={`/doctors/${a.doctor?._id}`} className="btn btn-ghost btn-sm">View</Link>
+                          <Link to={`/doctors/${getDoctorId(a)}`} className="btn btn-ghost btn-sm">View</Link>
                           {a.status === 'requested' && (
                             <button
                               onClick={() => handleCancel(a._id)}
@@ -187,7 +188,7 @@ export default function Appointments() {
                     {a.reason && <div className="text-slate-600">{a.reason}</div>}
                   </div>
                   <div className="flex gap-2 pt-3 border-t border-slate-100">
-                    <Link to={`/doctors/${a.doctor?._id}`} className="btn btn-secondary btn-sm flex-1 text-center">View doctor</Link>
+                    <Link to={`/doctors/${getDoctorId(a)}`} className="btn btn-secondary btn-sm flex-1 text-center">View doctor</Link>
                     {a.status === 'requested' && (
                       <button
                         onClick={() => handleCancel(a._id)}

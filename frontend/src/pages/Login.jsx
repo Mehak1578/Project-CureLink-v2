@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react'
-import axios from 'axios'
+import axios from '../api'
 import { Link, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../context/AuthContext'
 
@@ -23,10 +23,26 @@ export default function Login(){
     setLoading(true)
 
     try{
-      const res = await axios.post(import.meta.env.VITE_API_URL + '/api/auth/login', { email, password })
+      const res = await axios.post('/api/auth/login', { email, password })
       localStorage.setItem('token', res.data.token)
-      setUser(res.data.user)
-      navigate('/')
+      const user = res.data.user
+      if (!user || !user.role) {
+        setError('Authentication failed: Account has no valid role assigned.')
+        localStorage.removeItem('token')
+        return
+      }
+      setUser(user)
+      if (user.role === 'admin') {
+        navigate('/admin/dashboard')
+      } else if (user.role === 'doctor') {
+        navigate('/doctor/dashboard')
+      } else if (user.role === 'patient') {
+        navigate('/patient/dashboard')
+      } else {
+        setError(`Authentication failed: Unknown role '${user.role}'`)
+        localStorage.removeItem('token')
+        setUser(null)
+      }
     }catch(err){
       setError(err.response?.data?.msg || 'Invalid email or password')
     } finally {

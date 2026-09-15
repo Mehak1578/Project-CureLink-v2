@@ -7,6 +7,9 @@ const router = express.Router();
 // POST /api/appointments/ - create appointment (protected)
 router.post('/', auth, controller.create);
 
+// GET /api/appointments/available - get unbooked time slots for a doctor/date
+router.get('/available', auth, controller.getAvailableSlots);
+
 // GET /api/appointments/my - get user's appointments
 router.get('/my', auth, controller.getMy);
 
