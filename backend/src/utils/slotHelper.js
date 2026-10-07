@@ -1,5 +1,6 @@
 const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
+const { getIndiaDayBounds, INDIA_TIME_ZONE } = require('./indiaTime');
 
 const DEFAULT_WORKING_HOURS = {
   days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
@@ -72,13 +73,9 @@ const getAvailableSlotsForDoctorAndDate = async (doctorProfile, dateStr) => {
     doctorIds.push(doctorProfile.user._id || doctorProfile.user);
   }
 
-  const parts = dateStr.split('-');
-  const year = Number(parts[0]);
-  const month = Number(parts[1]) - 1;
-  const day = Number(parts[2]);
-  
-  const dayStart = new Date(year, month, day, 0, 0, 0);
-  const dayEnd = new Date(year, month, day + 1, 0, 0, 0);
+  const dayBounds = getIndiaDayBounds(dateStr);
+  if (!dayBounds) return [];
+  const { start: dayStart, end: dayEnd } = dayBounds;
 
   const appointments = await Appointment.find({
     doctor: { $in: doctorIds },
@@ -88,9 +85,12 @@ const getAvailableSlotsForDoctorAndDate = async (doctorProfile, dateStr) => {
 
   const bookedSlots = appointments.map(appt => {
     const d = new Date(appt.date);
-    const h = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    return `${h}:${min}`;
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: INDIA_TIME_ZONE,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(d);
   });
 
   return allSlots.filter(slot => !bookedSlots.includes(slot));

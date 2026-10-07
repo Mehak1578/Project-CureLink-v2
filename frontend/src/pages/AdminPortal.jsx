@@ -42,7 +42,7 @@ const formatDate = (value) => {
   if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  return date.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 const formatDateTime = (value) => {
@@ -50,6 +50,7 @@ const formatDateTime = (value) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
   return date.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -227,7 +228,7 @@ function Dashboard({ summary, appointments, loading }) {
                 <td className="text-sm font-medium text-slate-900">{row.patientName}</td>
                 <td className="text-sm text-slate-700">{row.doctorName}</td>
                 <td className="text-sm text-slate-700 font-medium text-sky-700">
-                  {new Date(row.dateTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(row.dateTime).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
                 </td>
                 <td>
                   <span className={`status-badge ${statusClass(row.status)}`}>

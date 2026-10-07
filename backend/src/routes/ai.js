@@ -7,6 +7,7 @@ const Doctor = require("../models/Doctor");
 const User = require("../models/User");
 const Appointment = require("../models/Appointment");
 const { getAvailableSlotsForDoctorAndDate } = require("../utils/slotHelper");
+const { indiaDateTimeToDate, INDIA_TIME_ZONE } = require("../utils/indiaTime");
 
 const router = express.Router();
 
@@ -586,9 +587,8 @@ async function executeTool(toolName, args, patientUserId) {
       }
 
       // Build the appointment datetime (local date + time)
-      const [year, month, day] = date.split("-").map(Number);
       const [hours, minutes] = timeSlot.split(":").map(Number);
-      const apptDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+      const apptDate = indiaDateTimeToDate(date, timeSlot);
 
       if (isNaN(apptDate.getTime())) return JSON.stringify({ error: "Invalid appointment date/time." });
 
@@ -639,6 +639,7 @@ async function executeTool(toolName, args, patientUserId) {
 
       // Human-readable date
       const dateLabel = apptDate.toLocaleDateString("en-IN", {
+        timeZone: INDIA_TIME_ZONE,
         weekday: "long",
         year: "numeric",
         month: "long",

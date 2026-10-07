@@ -81,8 +81,8 @@ const DashboardIcon = ({ children, className = 'w-5 h-5' }) => (
   </svg>
 )
 
-const formatDate = date => new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-const formatTime = date => new Date(date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+const formatDate = date => new Date(date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+const formatTime = date => new Date(date).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' })
 const doctorName = appointment => appointment.doctor?.user?.name || appointment.doctor?.name || 'Doctor'
 const doctorSpecialization = appointment => appointment.doctor?.specialization || 'Specialist'
 

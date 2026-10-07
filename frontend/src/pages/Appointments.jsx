@@ -48,8 +48,8 @@ export default function Appointments() {
     cancelled:  'status-badge status-cancelled',
   }[s] || 'status-badge bg-slate-100 text-slate-600')
 
-  const fmtDate = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  const fmtTime = (d) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  const fmtDate = (d) => new Date(d).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric', year: 'numeric' })
+  const fmtTime = (d) => new Date(d).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
   const getDoctorId = (appointment) => appointment.doctorId || appointment.doctor?._id || appointment.doctor?.user?._id
 
   if (loading) {

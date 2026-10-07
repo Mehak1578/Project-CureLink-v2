@@ -1,5 +1,6 @@
 const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
+const { getIndiaDayBounds, INDIA_TIME_ZONE } = require('../utils/indiaTime');
 
 const TIME_SLOTS = ['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00', '17:00'];
 
@@ -11,9 +12,9 @@ const getSlotRange = (date) => {
 };
 
 const getBookedSlots = async (doctor, date) => {
-  const dayStart = new Date(`${date}T00:00:00.000Z`);
-  if (Number.isNaN(dayStart.getTime())) return null;
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  const dayBounds = getIndiaDayBounds(date);
+  if (!dayBounds) return null;
+  const { start: dayStart, end: dayEnd } = dayBounds;
   const appointments = await Appointment.find({
     doctor,
     date: { $gte: dayStart, $lt: dayEnd },
@@ -21,8 +22,14 @@ const getBookedSlots = async (doctor, date) => {
   }).select('date').lean();
   return appointments.map(appointment => {
     const slotDate = new Date(appointment.date);
-    const hours = String(slotDate.getUTCHours()).padStart(2, '0');
-    const minutes = String(slotDate.getUTCMinutes()).padStart(2, '0');
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: INDIA_TIME_ZONE,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(slotDate);
+    const hours = parts.find(({ type }) => type === 'hour').value;
+    const minutes = parts.find(({ type }) => type === 'minute').value;
     return `${hours}:${minutes}`;
   });
 };

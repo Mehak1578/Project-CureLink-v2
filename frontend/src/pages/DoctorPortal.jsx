@@ -24,6 +24,7 @@ const emptyProfile = {
 
 const formatDate = (date) =>
   new Date(date).toLocaleDateString("en-US", {
+    timeZone: "Asia/Kolkata",
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -31,6 +32,7 @@ const formatDate = (date) =>
 
 const formatTime = (date) =>
   new Date(date).toLocaleTimeString("en-US", {
+    timeZone: "Asia/Kolkata",
     hour: "numeric",
     minute: "2-digit",
   });
