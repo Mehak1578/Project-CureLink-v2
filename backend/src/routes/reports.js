@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const cloudinary = require('../utils/cloudinary');
 const Report = require('../models/Report');
+const Activity = require('../models/Activity');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -87,9 +88,13 @@ router.post('/upload', auth, upload.single('report'), async (req, res) => {
       console.log('✅ File saved locally:', fileUrl);
     }
 
+    // Handle patient ID for doctors vs patients
+    const patientId = (req.body.patientId && req.user.role === 'doctor') ? req.body.patientId : req.user.id;
+    
     // Create report document with proper fields
     const report = new Report({ 
-      patient: req.user.id, 
+      patient: patientId, 
+      caseId: req.body.caseId || null,
       fileName: req.file.originalname,
       filename: req.file.originalname, // backward compatibility
       url: fileUrl, // Cloudinary URL or local path
@@ -100,6 +105,18 @@ router.post('/upload', auth, upload.single('report'), async (req, res) => {
     });
     
     await report.save();
+
+    // Track activity if associated with a Care Case
+    if (report.caseId) {
+      await Activity.create({
+        caseId: report.caseId,
+        user: req.user.id,
+        userRole: req.user.role,
+        userName: req.user.name,
+        action: "DOCUMENT_UPLOADED",
+        description: `${req.user.role === 'doctor' ? 'Dr. ' : ''}${req.user.name} uploaded ${report.fileName}`
+      });
+    }
 
     // Return formatted response
     res.json({

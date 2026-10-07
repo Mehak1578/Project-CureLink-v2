@@ -1,311 +1,230 @@
-import React, { useEffect, useState, useRef } from 'react'
-import { io } from 'socket.io-client'
+import React, { useEffect, useMemo, useState } from 'react';
+import axios from '../api';
+import { useLocation } from 'react-router-dom';
 
-export default function Chat(){
-  const [socket, setSocket] = useState(null)
-  const [text, setText] = useState('')
-  const [messages, setMessages] = useState([])
-  const [darkMode, setDarkMode] = useState(false)
-  const [replyTo, setReplyTo] = useState(null)
-  const messagesEndRef = useRef(null)
+const formatMessageTime = (date) =>
+  new Date(date).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 
-  useEffect(()=>{
-    const s = io(import.meta.env.VITE_API_URL?.replace('http','ws') || 'http://localhost:5000')
-    setSocket(s)
-    s.on('connect', ()=> console.log('connected', s.id))
-    s.on('chat:message', (msg) => setMessages(m=>[...m, msg]))
-    return ()=> s.disconnect()
-  }, [])
+export default function Chat() {
+  const location = useLocation();
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
+  const [threads, setThreads] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [selectedPeerId, setSelectedPeerId] = useState('');
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    setUser(JSON.parse(localStorage.getItem('user') || '{}'));
+  }, [location.pathname]);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
-  }, [darkMode])
+    const params = new URLSearchParams(location.search);
+    const doctorId = params.get('doctorId');
+    if (doctorId) setSelectedPeerId(doctorId);
+  }, [location.search]);
 
-  const send = () => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
-    if (!user?.id) return alert('Login first')
-    const payload = { 
-      from: user.id, 
-      to: user.id, 
-      text,
-      replyTo: replyTo?.text || null
+  const loadThreads = async () => {
+    try {
+      const response = await axios.get('/api/messages/conversations');
+      const nextThreads = response.data || [];
+      setThreads(nextThreads);
+      if (!selectedPeerId && nextThreads.length) {
+        const nextPeer = user?.role === 'doctor' ? nextThreads[0].patientId : nextThreads[0].doctorId;
+        setSelectedPeerId(nextPeer || '');
+      }
+    } catch (error) {
+      console.error('Unable to load threads', error);
     }
-    socket.emit('chat:message', payload)
-    setText('')
-    setReplyTo(null)
-  }
+  };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      send()
+  useEffect(() => {
+    loadThreads();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const loadConversation = async () => {
+      if (!selectedPeerId) {
+        setMessages([]);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const response = await axios.get(`/api/messages/conversation/${selectedPeerId}`);
+        setMessages(response.data || []);
+      } catch (error) {
+        console.error('Unable to load conversation', error);
+        setMessages([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadConversation();
+  }, [selectedPeerId, user?.id]);
+
+  const activePeerName = useMemo(() => {
+    if (!selectedPeerId) return 'No conversation selected';
+
+    const thread = threads.find((item) =>
+      user?.role === 'doctor'
+        ? item.patientId === selectedPeerId
+        : item.doctorId === selectedPeerId,
+    );
+
+    return thread
+      ? (user?.role === 'doctor' ? thread.patientName : thread.doctorName)
+      : 'Conversation';
+  }, [selectedPeerId, threads, user?.role]);
+
+  const sendMessage = async () => {
+    if (!selectedPeerId || !text.trim()) return;
+
+    setSending(true);
+    try {
+      const payload = user?.role === 'doctor'
+        ? { patientId: selectedPeerId, text: text.trim() }
+        : { doctorId: selectedPeerId, text: text.trim() };
+
+      await axios.post('/api/messages/send', payload);
+      setText('');
+      await loadThreads();
+      const response = await axios.get(`/api/messages/conversation/${selectedPeerId}`);
+      setMessages(response.data || []);
+    } catch (error) {
+      console.error('Unable to send message', error);
+      alert(error.response?.data?.msg || 'Could not send the message.');
+    } finally {
+      setSending(false);
     }
-  }
+  };
 
   return (
-    <div className="smart-chat-container" style={{
-      minHeight: '100vh',
-      background: 'var(--bg)',
-      color: 'var(--text)',
-      transition: 'background-color 0.25s ease, color 0.25s ease'
-    }}>
-      {/* Header */}
-      <div className="smart-chat-header" style={{
-        width: '100%',
-        background: 'var(--header-bg)',
-        padding: '16px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-      }}>
-        <h1 style={{
-          fontSize: '24px',
-          fontWeight: 'bold',
-          color: '#ffffff',
-          margin: 0
-        }}>SmartChat</h1>
-        
-        {/* Theme Toggle Button */}
-        <button
-          onClick={() => setDarkMode(!darkMode)}
-          style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '50%',
-            background: darkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.25s ease',
-            color: '#ffffff'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = darkMode ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = darkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'
-          }}
-        >
-          {darkMode ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="5"/>
-              <line x1="12" y1="1" x2="12" y2="3"/>
-              <line x1="12" y1="21" x2="12" y2="23"/>
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-              <line x1="1" y1="12" x2="3" y2="12"/>
-              <line x1="21" y1="12" x2="23" y2="12"/>
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-            </svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-            </svg>
-          )}
-        </button>
-      </div>
-
-      {/* Messages Container */}
-      <div style={{
-        maxWidth: '900px',
-        margin: '0 auto',
-        padding: '20px',
-        height: 'calc(100vh - 200px)',
-        overflowY: 'auto'
-      }}>
-        {messages.length === 0 ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '60px 20px',
-            color: darkMode ? '#9aa0b5' : '#7a7a7a'
-          }}>
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: '0 auto 16px' }}>
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-            <p style={{ fontSize: '18px', fontWeight: '500' }}>No messages yet</p>
-            <p style={{ fontSize: '14px', marginTop: '8px' }}>Start a conversation!</p>
+    <div className="min-h-screen bg-slate-50 py-8">
+      <div className="container-max max-w-6xl">
+        <div className="card overflow-hidden p-0">
+          <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+            <h1 className="text-2xl font-bold text-slate-900">Messages</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Private conversations with your care team.
+            </p>
           </div>
-        ) : (
-          messages.map((m, i) => (
-            <div key={i} style={{
-              marginBottom: '16px',
-              padding: '12px 16px',
-              background: darkMode ? '#1c2333' : '#f8f9fa',
-              borderRadius: '12px',
-              transition: 'background-color 0.25s ease'
-            }}>
-              {m.replyTo && (
-                <div style={{
-                  padding: '8px 12px',
-                  marginBottom: '8px',
-                  borderLeft: '3px solid #7a5cff',
-                  background: darkMode ? 'rgba(122, 92, 255, 0.1)' : 'rgba(122, 92, 255, 0.05)',
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                  color: darkMode ? '#9aa0b5' : '#7a7a7a'
-                }}>
-                  Replying to: {m.replyTo}
-                </div>
-              )}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '8px'
-              }}>
-                <strong style={{ color: '#7a5cff', fontSize: '14px' }}>{m.from}</strong>
-                <button
-                  onClick={() => setReplyTo(m)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: darkMode ? '#9aa0b5' : '#7a7a7a',
-                    fontSize: '12px',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent'
-                  }}
-                >
-                  Reply
-                </button>
-              </div>
-              <div style={{ color: 'var(--text)', fontSize: '15px', lineHeight: '1.5' }}>
-                {m.text}
-              </div>
-            </div>
-          ))
-        )}
-        <div ref={messagesEndRef} />
-      </div>
 
-      {/* Input Area */}
-      <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'var(--bg)',
-        borderTop: `1px solid ${darkMode ? '#2a3142' : '#e5e7eb'}`,
-        padding: '16px',
-        transition: 'all 0.25s ease'
-      }}>
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-          {replyTo && (
-            <div style={{
-              padding: '8px 12px',
-              marginBottom: '8px',
-              background: darkMode ? '#1c2333' : '#f8f9fa',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: '13px'
-            }}>
-              <span style={{ color: darkMode ? '#9aa0b5' : '#7a7a7a' }}>
-                Replying to: {replyTo.text.substring(0, 50)}...
-              </span>
-              <button
-                onClick={() => setReplyTo(null)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: darkMode ? '#9aa0b5' : '#7a7a7a',
-                  fontSize: '18px',
-                  padding: '0 8px'
-                }}
-              >
-                ×
-              </button>
+          <div className="grid min-h-[620px] lg:grid-cols-[320px_1fr]">
+            <aside className="border-b border-slate-200 bg-white lg:border-b-0 lg:border-r">
+              <div className="max-h-[620px] overflow-y-auto">
+                {threads.length === 0 ? (
+                  <div className="p-5 text-sm text-slate-500">
+                    No private conversations yet.
+                  </div>
+                ) : (
+                  threads.map((thread) => {
+                    const peerId = user?.role === 'doctor' ? thread.patientId : thread.doctorId;
+                    const peerName = user?.role === 'doctor' ? thread.patientName : thread.doctorName;
+
+                    return (
+                      <button
+                        key={peerId}
+                        type="button"
+                        onClick={() => setSelectedPeerId(peerId)}
+                        className={`w-full border-b border-slate-100 p-4 text-left transition-colors ${selectedPeerId === peerId ? 'bg-sky-50' : 'hover:bg-slate-50'}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-semibold text-slate-900">{peerName}</p>
+                          </div>
+                          {thread.unreadCount > 0 && (
+                            <span className="rounded-full bg-sky-600 px-2 py-0.5 text-xs font-semibold text-white">
+                              {thread.unreadCount}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="mt-2 line-clamp-2 text-sm text-slate-600">
+                          {thread.lastMessage}
+                        </p>
+                        <p className="mt-2 text-xs text-slate-400">
+                          {formatMessageTime(thread.lastMessageAt)}
+                        </p>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </aside>
+
+            <div className="flex min-h-[620px] flex-col bg-white">
+              {!selectedPeerId ? (
+                <div className="flex flex-1 items-center justify-center p-6 text-center text-slate-500">
+                  Select a conversation to view the thread.
+                </div>
+              ) : (
+                <>
+                  <div className="border-b border-slate-200 px-5 py-4">
+                    <h2 className="text-lg font-bold text-slate-900">{activePeerName}</h2>
+                  </div>
+
+                  <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50 p-5">
+                    {loading ? (
+                      <div className="text-sm text-slate-500">Loading messages...</div>
+                    ) : messages.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+                        No messages in this conversation yet. Send the first message.
+                      </div>
+                    ) : (
+                      messages.map((message) => {
+                        const isMine = String(message.from) === String(user?.id);
+                        return (
+                          <div key={message._id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                            <div
+                              className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-sm ${
+                                isMine ? 'bg-sky-600 text-white' : 'bg-white text-slate-800'
+                              }`}
+                            >
+                              <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>
+                              <p className={`mt-2 text-[10px] ${isMine ? 'text-sky-100' : 'text-slate-400'}`}>
+                                {formatMessageTime(message.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="border-t border-slate-200 bg-white p-4">
+                    <div className="flex gap-3">
+                      <textarea
+                        rows={3}
+                        value={text}
+                        onChange={(event) => setText(event.target.value)}
+                        placeholder="Type your message..."
+                        className="field-input min-h-[88px] flex-1 resize-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={sending || !text.trim()}
+                        onClick={sendMessage}
+                        className="btn btn-primary self-end"
+                      >
+                        {sending ? 'Sending...' : 'Send'}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-          )}
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <input
-              value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type a message..."
-              style={{
-                flex: 1,
-                padding: '14px 16px',
-                background: 'var(--input-bg)',
-                color: 'var(--input-text)',
-                border: `1px solid ${darkMode ? '#2a3142' : '#e5e7eb'}`,
-                borderRadius: '12px',
-                fontSize: '15px',
-                outline: 'none',
-                transition: 'background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease'
-              }}
-            />
-            <button
-              onClick={send}
-              style={{
-                padding: '14px 24px',
-                background: 'linear-gradient(to right, #7a5cff, #b374ff)',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '12px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                fontSize: '15px'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.02)'
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(122, 92, 255, 0.3)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)'
-                e.currentTarget.style.boxShadow = 'none'
-              }}
-            >
-              Send
-            </button>
           </div>
         </div>
       </div>
-
-      {/* Global Styles */}
-      <style>{`
-        :root {
-          --bg: #ffffff;
-          --text: #111;
-          --header-bg: linear-gradient(to right, #7a5cff, #b374ff);
-          --input-bg: #ffffff;
-          --input-text: #000;
-        }
-
-        [data-theme='dark'] {
-          --bg: #0f1624;
-          --text: #fff;
-          --header-bg: linear-gradient(to right, #5a3aff, #9d6cff);
-          --input-bg: #1c2333;
-          --input-text: #fff;
-        }
-
-        input::placeholder {
-          color: ${darkMode ? '#9aa0b5' : '#7a7a7a'};
-        }
-
-        .smart-chat-container * {
-          box-sizing: border-box;
-        }
-      `}</style>
     </div>
-  )
+  );
 }

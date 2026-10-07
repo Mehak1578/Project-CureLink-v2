@@ -109,3 +109,76 @@ test('accepts a short existing login password as the current password', async ()
 
   expect(changed.statusCode).toBe(200);
 });
+
+test('treats case and whitespace variants of the same email as the same account', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/auth', require('../src/routes/auth'));
+
+  const normal = { name: 'Case Test', email: 'case-test@example.com', password: 'Password123!' };
+  const duplicate = { name: 'Case Test Duplicate', email: '  CASE-TEST@EXAMPLE.COM  ', password: 'AnotherPass123!' };
+
+  const first = await request(app).post('/api/auth/register').send(normal);
+  expect(first.statusCode).toBe(200);
+
+  const second = await request(app).post('/api/auth/register').send(duplicate);
+  expect(second.statusCode).toBe(400);
+  expect(second.body.msg).toBe('User already exists');
+});
+
+test('tracks appointment details across conversation messages', () => {
+  const { extractAppointmentState, buildAppointmentStatePrompt } = require('../src/routes/ai');
+
+  const messages = [
+    { role: 'user', content: 'I want to book an appointment today.' },
+    { role: 'assistant', content: 'Sure. Which doctor or specialization would you like?' },
+    { role: 'user', content: 'Dr Rajesh Sharma.' },
+    { role: 'assistant', content: 'I found Dr Rajesh Sharma. What time would you prefer?' },
+    { role: 'user', content: 'Book 10 AM tomorrow.' },
+  ];
+
+  const state = extractAppointmentState(messages);
+  expect(state.doctorName).toContain('Rajesh Sharma');
+  expect(state.date).toBeTruthy();
+  expect(state.time).toBe('10:00');
+  expect(buildAppointmentStatePrompt(messages)).toContain('Rajesh Sharma');
+});
+
+test('creates and reuses the same message thread for a patient-doctor pair', async () => {
+  const app = express();
+  const auth = require('../src/middleware/auth');
+  const User = require('../src/models/User');
+  const Message = require('../src/models/Message');
+
+  app.use(express.json());
+  app.use('/api/messages', require('../src/routes/messages'));
+
+  const patient = await User.create({ name: 'Patient One', email: 'patient-thread@example.com', password: 'Password123!' });
+  const doctor = await User.create({ name: 'Doctor One', email: 'doctor-thread@example.com', password: 'Password123!', role: 'doctor' });
+
+  const sendAsPatient = await request(app)
+    .post('/api/messages/send')
+    .set('Authorization', `Bearer ${require('jsonwebtoken').sign({ id: patient._id, role: 'patient' }, process.env.JWT_SECRET || 'secret')}`)
+    .send({ doctorId: doctor._id, text: 'Hello doctor' });
+
+  expect(sendAsPatient.statusCode).toBe(200);
+  expect(sendAsPatient.body.message).toMatch(/Hello doctor/i);
+
+  const second = await request(app)
+    .post('/api/messages/send')
+    .set('Authorization', `Bearer ${require('jsonwebtoken').sign({ id: patient._id, role: 'patient' }, process.env.JWT_SECRET || 'secret')}`)
+    .send({ doctorId: doctor._id, text: 'Follow up question' });
+
+  expect(second.statusCode).toBe(200);
+
+  const threadCount = await Message.countDocuments({ patientId: patient._id, doctorId: doctor._id });
+  expect(threadCount).toBe(2);
+
+  const conversations = await request(app)
+    .get('/api/messages/conversations')
+    .set('Authorization', `Bearer ${require('jsonwebtoken').sign({ id: doctor._id, role: 'doctor' }, process.env.JWT_SECRET || 'secret')}`);
+
+  expect(conversations.statusCode).toBe(200);
+  expect(conversations.body.length).toBeGreaterThanOrEqual(1);
+  expect(conversations.body[0].patientId).toBe(String(patient._id));
+});

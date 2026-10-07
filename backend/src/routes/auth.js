@@ -7,6 +7,8 @@ const auth = require('../middleware/auth');
 
 const router = express.Router();
 
+const normalizeEmail = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
+
 const profileFields = ['name', 'email', 'phone', 'dateOfBirth', 'gender', 'address', 'bloodGroup', 'allergies', 'existingConditions', 'emergencyContactName', 'emergencyContactNumber'];
 const notificationFields = ['appointmentReminders', 'appointmentUpdates', 'reportUpdates', 'emailNotifications'];
 
@@ -93,10 +95,12 @@ router.delete('/account', auth, async (req, res) => {
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
-    if (!name || !email || !password) return res.status(400).json({ msg: 'Missing fields' });
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!name || !normalizedEmail || !password) return res.status(400).json({ msg: 'Missing fields' });
     if (role && !['patient', 'doctor', 'admin'].includes(role)) return res.status(400).json({ msg: 'Invalid account type' });
 
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email: normalizedEmail });
     if (user) return res.status(400).json({ msg: 'User already exists' });
 
     const salt = await bcrypt.genSalt(10);
@@ -105,8 +109,8 @@ router.post('/register', async (req, res) => {
     const roleValue = role || 'patient';
     const isDoctor = roleValue === 'doctor';
     user = new User({
-      name,
-      email,
+      name: String(name).trim(),
+      email: normalizedEmail,
       password: hash,
       role: roleValue,
       verified: isDoctor ? false : true,
@@ -133,8 +137,9 @@ router.post('/register', async (req, res) => {
     const token = jwt.sign(payload, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
     res.json({ token, user: serializeUser(user) });
   } catch (err) {
+    if (err && err.code === 11000) return res.status(400).json({ msg: 'User already exists' });
     console.error(err.message);
-    res.status(500).send('Server error');
+    res.status(500).json({ msg: 'Server error' });
   }
 });
 
@@ -142,9 +147,10 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ msg: 'Missing fields' });
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail || !password) return res.status(400).json({ msg: 'Missing fields' });
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) return res.status(400).json({ msg: 'Invalid credentials' });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -155,7 +161,7 @@ router.post('/login', async (req, res) => {
     res.json({ token, user: serializeUser(user) });
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server error');
+    res.status(500).json({ msg: 'Server error' });
   }
 });
 

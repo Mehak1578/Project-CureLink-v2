@@ -231,7 +231,17 @@ function PatientDashboard({ user }) {
     }
   }
 
-  useEffect(() => { loadDashboard() }, [user])
+  useEffect(() => { 
+    loadDashboard() 
+    
+    // Listen for AI appointment bookings
+    const handleBooking = () => loadDashboard()
+    window.addEventListener('appointmentBooked', handleBooking)
+    
+    return () => {
+      window.removeEventListener('appointmentBooked', handleBooking)
+    }
+  }, [user])
 
   if (loading) return <div className="page-loading"><div className="spinner" /><span>Loading your dashboard...</span></div>
   if (error) return <div className="page-shell"><div className="page-body"><div className="empty-state max-w-md mx-auto"><div className="empty-state-icon bg-red-50"><DashboardIcon className="text-red-500">M12 8v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0</DashboardIcon></div><h2 className="text-base font-semibold text-slate-900">Dashboard unavailable</h2><p className="text-sm text-slate-500">{error}</p><button type="button" onClick={loadDashboard} className="btn btn-primary btn-sm mt-2">Try again</button></div></div></div>

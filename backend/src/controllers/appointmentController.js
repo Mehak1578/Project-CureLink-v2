@@ -95,6 +95,29 @@ exports.getMy = async (req, res) => {
   }
 };
 
+exports.updateDoctorStatus = async (req, res) => {
+  try {
+    const allowedStatuses = ['confirmed', 'waiting', 'in_consultation', 'completed', 'cancelled'];
+    const { status } = req.body;
+    if (!allowedStatuses.includes(status)) return res.status(400).json({ msg: 'Invalid appointment status' });
+
+    const doctorProfiles = await Doctor.find({ user: req.user.id }).select('_id').lean();
+    const doctorIds = doctorProfiles.map(profile => profile._id);
+    const appointment = await Appointment.findOne({
+      _id: req.params.id,
+      $or: [{ doctor: req.user.id }, { doctor: { $in: doctorIds } }],
+    }).populate('patient', 'name email');
+    if (!appointment) return res.status(404).json({ msg: 'Appointment not found' });
+
+    appointment.status = status;
+    await appointment.save();
+    res.json(appointment);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Unable to update appointment status' });
+  }
+};
+
 exports.reschedule = async (req, res) => {
   try {
     const { id } = req.params;

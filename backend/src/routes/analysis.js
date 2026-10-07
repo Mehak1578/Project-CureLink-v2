@@ -6,12 +6,31 @@ const { fromPath } = require("pdf2pic");
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const router = express.Router();
 
-const HUGGINGFACE_API_URL = "https://router.huggingface.co/v1/chat/completions";
-const HUGGINGFACE_MODEL =
-  process.env.HUGGINGFACE_MODEL || "Qwen/Qwen2.5-VL-72B-Instruct";
+const GEMINI_VISION_MODEL =
+  process.env.GEMINI_VISION_MODEL || "gemini-2.0-flash";
+const GEMINI_TEXT_MODEL =
+  process.env.GEMINI_TEXT_MODEL || "gemini-2.0-flash-lite";
+
+const cleanAnalysisText = (text) =>
+  text
+    .replace(/^\s*#{1,6}\s*/gm, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .trim();
+
+const getGeminiResponse = async (modelName, contents) => {
+  const client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const model = client.getGenerativeModel({ model: modelName });
+  const result = await model.generateContent({
+    contents: [{ role: "user", parts: contents }],
+    generationConfig: { maxOutputTokens: 4096 },
+  });
+  return result.response.text();
+};
 
 router.post("/report/:id", auth, async (req, res) => {
   try {
@@ -163,19 +182,46 @@ router.post("/report/:id", auth, async (req, res) => {
       });
     }
 
-    // STEP 2: HUGGING FACE VISION REQUEST WITH RETRY
-    const huggingFaceToken =
-      process.env.HUGGINGFACE_API_KEY ||
-      process.env.HF_TOKEN ||
-      process.env.GEMINI_API_KEY;
-    if (!huggingFaceToken) {
+    // STEP 2: AI 1 extracts report text from the image.
+    if (!process.env.GEMINI_API_KEY) {
       return res.status(500).json({
         msg: "AI analysis is not configured on the server.",
-        error: "Set HUGGINGFACE_API_KEY in the backend environment.",
+        error: "Set GEMINI_API_KEY in the backend environment.",
       });
     }
 
-    console.log("🤖 Sending request to Hugging Face Vision...");
+    const extractionPrompt = `Read this medical report image carefully and extract all visible text and data.
+Return only the extracted report text as plain text. Do not analyze, interpret, summarize, translate, or give medical advice.
+Preserve test names, values, units, reference ranges, dates, headings, and other visible details accurately. Do not invent text that is not visible.`;
+
+    let extractedText;
+    try {
+      console.log("🤖 AI 1: sending report image to Gemini vision...");
+      extractedText = await getGeminiResponse(GEMINI_VISION_MODEL, [
+        { text: extractionPrompt },
+        { inlineData: { mimeType, data: base64Image } },
+      ]);
+
+      if (!extractedText || !extractedText.trim()) {
+        throw new Error("Vision model returned empty extracted text");
+      }
+
+      extractedText = extractedText.trim();
+      console.log(
+        "✅ AI 1 completed. Extracted text length:",
+        extractedText.length,
+      );
+    } catch (visionError) {
+      const providerError =
+        visionError.response?.data?.error ||
+        visionError.message ||
+        "Unknown vision model error";
+      console.error("❌ AI 1 vision error:", providerError);
+      return res.status(502).json({
+        msg: "Failed to extract text from the medical report.",
+        error: providerError,
+      });
+    }
 
     const languageInstruction =
       language === "hindi"
@@ -183,7 +229,7 @@ router.post("/report/:id", auth, async (req, res) => {
         : language === "english_hindi"
           ? "Write a complete bilingual response. For every important value, finding, and health insight, provide the English explanation followed immediately by its complete Hindi equivalent in proper Devanagari script. Do not replace the full analysis with a short mixed-language summary."
           : "Write the entire response in English without shortening or omitting any information.";
-    const analysisPrompt = `Analyze this medical report or image and provide a comprehensive medical report interpretation.
+    const analysisPrompt = `Analyze the extracted medical report text and provide a comprehensive medical report interpretation.
 
 Provide a comprehensive analysis of ALL relevant values in the medical report. Do not omit, compress, or summarize findings based on the selected language. Include every visible test name, value, unit, reference or normal range, abnormal finding, and medically relevant health insight. Preserve values and ranges accurately, and do not invent information that is not visible in the report.
 
@@ -194,128 +240,40 @@ Use this structure whenever the information is available:
 ### Health Insights
 Include any other relevant sections needed to cover the report completely. Explain each important finding, not just the overall conclusion. ${languageInstruction}
 
-Do not include a note, disclaimer, or statement that this is not a diagnosis; the application provides its own disclaimer.`;
+Do not include a note, disclaimer, or statement that this is not a diagnosis; the application provides its own disclaimer.
+Return plain text only. Do not use Markdown headings, hashtags, asterisks, or decorative formatting.`;
 
-    const maxAttempts = 2;
-    const retryDelay = 500;
-    let lastError;
+    // STEP 3: AI 2 analyzes only the text extracted by AI 1.
+    try {
+      console.log("🤖 AI 2: sending extracted report text to Gemini...");
+      const aiText = await getGeminiResponse(GEMINI_TEXT_MODEL, [
+        { text: `${analysisPrompt}\n\nExtracted medical report text:\n${extractedText}` },
+      ]);
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        // Validate inputs before sending
-        if (!base64Image) {
-          throw new Error("Base64 image data is missing");
-        }
-        if (!mimeType) {
-          throw new Error("MIME type is missing");
-        }
-
-        const result = await axios.post(
-          HUGGINGFACE_API_URL,
-          {
-            model: HUGGINGFACE_MODEL,
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: analysisPrompt,
-                  },
-                  {
-                    type: "image_url",
-                    image_url: {
-                      url: `data:${mimeType};base64,${base64Image}`,
-                    },
-                  },
-                ],
-              },
-            ],
-            max_tokens: 1500,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${huggingFaceToken}`,
-              "Content-Type": "application/json",
-            },
-            timeout: 60000,
-          },
-        );
-
-        console.log("✅ Hugging Face responded");
-
-        const aiText = result.data?.choices?.[0]?.message?.content;
-
-        if (!aiText) {
-          return res.status(500).json({
-            msg: "Failed to analyze report.",
-            error: "Hugging Face returned no analysis text",
-          });
-        }
-
-        // STEP 3: SAVE ANALYSIS
-        report.analysis = aiText;
-        await report.save();
-
-        return res.json({
-          success: true,
-          analysis: aiText,
-        });
-      } catch (huggingFaceError) {
-        lastError = huggingFaceError;
-        const errorMessage =
-          huggingFaceError.response?.data?.error ||
-          huggingFaceError.message ||
-          "";
-        const isOverloaded =
-          errorMessage.toLowerCase().includes("overloaded") ||
-          errorMessage.includes("503");
-
-        console.error(
-          `❌ Hugging Face error (attempt ${attempt}/${maxAttempts}):`,
-          errorMessage,
-        );
-
-        if (isOverloaded && attempt < maxAttempts) {
-          console.log(
-            `⚠️ Hugging Face is busy. Retrying in ${retryDelay}ms...`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          continue;
-        }
-
-        // If not overloaded or retries exhausted, break
-        break;
+      if (!aiText || !aiText.trim()) {
+        throw new Error("Text model returned empty analysis");
       }
-    }
 
-    // All retries exhausted or non-retryable error
-    const providerError =
-      lastError.response?.data?.error ||
-      lastError.response?.data?.message ||
-      lastError.message ||
-      "Unknown Hugging Face error";
-    const finalError =
-      typeof providerError === "string"
-        ? providerError
-        : JSON.stringify(providerError);
-    console.error("❌ Hugging Face error after retries:", finalError);
+      const cleanedAnalysis = cleanAnalysisText(aiText);
+      report.analysis = cleanedAnalysis;
+      await report.save();
 
-    const errorMessage = finalError || "";
-    const isOverloaded =
-      errorMessage.toLowerCase().includes("overloaded") ||
-      errorMessage.includes("503");
-
-    if (isOverloaded) {
-      return res.status(503).json({
-        msg: "The AI service is currently busy. Please try again.",
+      console.log("✅ AI 2 completed and analysis saved");
+      return res.json({
+        success: true,
+        analysis: cleanedAnalysis,
+      });
+    } catch (textError) {
+      const providerError =
+        textError.response?.data?.error ||
+        textError.message ||
+        "Unknown text model error";
+      console.error("❌ AI 2 text analysis error:", providerError);
+      return res.status(502).json({
+        msg: "Failed to analyze the extracted medical report text.",
+        error: providerError,
       });
     }
-
-    return res.status(500).json({
-      msg: "Failed to analyze report.",
-      error: finalError,
-    });
   } catch (error) {
     console.error("❌ Server Error:", error.message);
     return res.status(500).json({

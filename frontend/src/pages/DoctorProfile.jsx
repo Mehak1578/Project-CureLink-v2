@@ -155,7 +155,7 @@ export default function DoctorProfile(){
               Book Appointment
             </button>
             <Link 
-              to="/chat"
+              to={`/chat?doctorId=${encodeURIComponent(doctor.user?._id || doctor.user || doctor._id)}`}
               className="flex-1 px-6 py-4 bg-white hover:bg-slate-50 text-sky-600 font-semibold rounded-lg border-2 border-sky-500 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

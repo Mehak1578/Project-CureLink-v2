@@ -1,5 +1,6 @@
 const express = require('express');
 const auth = require('../middleware/auth');
+const roles = require('../middleware/roles');
 const controller = require('../controllers/appointmentController');
 
 const router = express.Router();
@@ -12,6 +13,9 @@ router.get('/available', auth, controller.getAvailableSlots);
 
 // GET /api/appointments/my - get user's appointments
 router.get('/my', auth, controller.getMy);
+
+// PATCH /api/appointments/doctor/:id/status - update an appointment assigned to the doctor
+router.patch('/doctor/:id/status', auth, roles('doctor'), controller.updateDoctorStatus);
 
 // PUT /api/appointments/reschedule/:id - reschedule
 router.put('/reschedule/:id', auth, controller.reschedule);
