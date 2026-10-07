@@ -19,10 +19,14 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: HUGGINGFACE_API_KEY
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_TOOL_MODEL
+        value: llama-3.3-70b-versatile
+      - key: HF_TOKEN
         sync: false
       - key: HUGGINGFACE_MODEL
-        value: Qwen/Qwen2.5-VL-72B-Instruct
+        value: HuggingFaceH4/zephyr-7b-beta
       - key: STRIPE_SECRET_KEY
         sync: false
 
@@ -32,4 +36,4 @@ services:
     buildCommand: cd frontend && npm install && npm run build
     envVars:
       - key: VITE_API_URL
-        value: https://curelink-backend.onrender.com
+        value: https://curelink-backend-v2.onrender.com

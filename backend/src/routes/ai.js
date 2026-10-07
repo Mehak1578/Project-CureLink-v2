@@ -827,7 +827,12 @@ router.post("/chat-with-tools", auth, async (req, res) => {
       newContext
     });
   } catch (error) {
-    console.error("AI Chat-with-Tools Error:", error.message);
+    console.error("AI Chat-with-Tools Error:", {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+      providerMessage: error.response?.data?.error?.message,
+    });
     res.status(500).json({ msg: "Failed to generate AI response. Please try again." });
   }
 });
@@ -835,4 +840,3 @@ router.post("/chat-with-tools", auth, async (req, res) => {
 module.exports = router;
 module.exports.extractAppointmentState = parseAppointmentState;
 module.exports.buildAppointmentStatePrompt = buildAppointmentStatePrompt;
-

@@ -25,15 +25,32 @@ async function callGrokWithTools(messages, tools = [], maxTokens = 800) {
     body.tool_choice = 'auto';
   }
 
-  const response = await axios.post(GROQ_API_URL, body, {
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    timeout: 45000,
-  });
+  try {
+    const response = await axios.post(GROQ_API_URL, body, {
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 45000,
+    });
 
-  return response.data.choices[0];
+    const choice = response.data?.choices?.[0];
+    if (!choice) {
+      throw new Error('Groq returned a response without a choice');
+    }
+    return choice;
+  } catch (error) {
+    const status = error.response?.status;
+    const providerMessage = error.response?.data?.error?.message;
+    const details = [
+      status ? `status=${status}` : null,
+      error.code ? `code=${error.code}` : null,
+      providerMessage ? `provider=${providerMessage}` : null,
+      !status && !providerMessage ? `message=${error.message}` : null,
+    ].filter(Boolean).join(' ');
+    console.error(`[Groq tool request failed] model=${GROQ_TOOL_MODEL} ${details}`);
+    throw error;
+  }
 }
 
 module.exports = { callGrokWithTools };
