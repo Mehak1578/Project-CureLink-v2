@@ -6,14 +6,21 @@ axios.defaults.timeout = 15000 // 15 s — prevents infinite spinner on cold-sta
 
 // Attach auth token automatically when present to avoid sending malformed headers
 axios.interceptors.request.use((config) => {
-	try{
-		const token = localStorage.getItem('token')
-		if (token && token !== 'null' && token !== 'undefined') {
-			config.headers = config.headers || {}
-				const value = token.replace(/^Bearer\s+/i, '').trim()
-				if (value) config.headers.Authorization = 'Bearer ' + value
+	try {
+		const rawToken = localStorage.getItem('token')
+		if (rawToken && rawToken !== 'null' && rawToken !== 'undefined') {
+			const token = rawToken.replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, '').trim()
+			if (token) {
+				const authHeader = 'Bearer ' + token
+				if (config.headers?.set) {
+					config.headers.set('Authorization', authHeader)
+				} else {
+					config.headers = config.headers || {}
+					config.headers.Authorization = authHeader
+				}
+			}
 		}
-	}catch(e){ /* ignore */ }
+	} catch (e) { /* ignore */ }
 	return config
 })
 

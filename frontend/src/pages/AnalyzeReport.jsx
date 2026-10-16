@@ -5,10 +5,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 const removeGeneratedNote = (analysis) =>
-  analysis.replace(
-    /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?Note(?:\*\*)?\s*:[\s\S]*?(?=\n\s*#{1,6}\s|\n{2,}|\s*$)/gi,
-    "",
-  );
+  typeof analysis === "string"
+    ? analysis.replace(
+        /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?Note(?:\*\*)?\s*:[\s\S]*?(?=\n\s*#{1,6}\s|\n{2,}|\s*$)/gi,
+        "",
+      )
+    : "";
 
 export default function AnalyzeReport() {
   const { id } = useParams();
@@ -66,8 +68,8 @@ export default function AnalyzeReport() {
       );
 
       // Update the report state with the analysis from the response
-      if (!res.data?.analysis) {
-        throw new Error("Analysis response did not include analysis text");
+      if (!res.data?.analysis || typeof res.data.analysis !== "string") {
+        throw new Error(res.data?.msg || res.data?.error || "Analysis response did not include analysis text");
       }
 
       setReport((prevReport) => ({
@@ -80,11 +82,8 @@ export default function AnalyzeReport() {
       setTimeout(() => setSuccessMsg(""), 3000);
     } catch (err) {
       console.error("Analysis error:", err);
-      setError(
-        err.response?.data?.error ||
-          err.response?.data?.msg ||
-          "Failed to analyze report. Please try again.",
-      );
+      const rawError = err.response?.data?.error || err.response?.data?.msg || err.message || "Failed to analyze report. Please try again.";
+      setError(typeof rawError === 'string' ? rawError : (rawError.message || JSON.stringify(rawError)));
     } finally {
       setAnalyzing(false);
       analysisRequestInFlight.current = false;
@@ -200,21 +199,33 @@ export default function AnalyzeReport() {
 
         {/* Error Message */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-            <svg
-              className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <svg
+                className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <div>
+                <p className="text-red-700 font-medium">{error}</p>
+                <p className="text-xs text-red-500 mt-0.5">Please check your connection and try again.</p>
+              </div>
+            </div>
+            <button
+              onClick={analyzeReport}
+              disabled={analyzing}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-300 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0 cursor-pointer disabled:cursor-not-allowed"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <p className="text-red-700 font-medium">{error}</p>
+              {analyzing ? "Retrying..." : "Retry Analysis"}
+            </button>
           </div>
         )}
 
@@ -390,7 +401,7 @@ export default function AnalyzeReport() {
         </div>
 
         {/* AI Analysis Results */}
-        {report?.analysis && (
+        {report?.analysis && typeof report.analysis === "string" && (
           <div className="bg-white rounded-2xl shadow-xl p-8 border border-emerald-200">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">

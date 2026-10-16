@@ -6,14 +6,10 @@ const { fromPath } = require("pdf2pic");
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { callGrok, callGrokVision } = require("../utils/grok");
+const { callHuggingFace } = require("../utils/huggingface");
 
 const router = express.Router();
-
-const GEMINI_VISION_MODEL =
-  process.env.GEMINI_VISION_MODEL || "gemini-2.0-flash";
-const GEMINI_TEXT_MODEL =
-  process.env.GEMINI_TEXT_MODEL || "gemini-2.0-flash-lite";
 
 const cleanAnalysisText = (text) =>
   text
@@ -21,16 +17,6 @@ const cleanAnalysisText = (text) =>
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
     .trim();
-
-const getGeminiResponse = async (modelName, contents) => {
-  const client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = client.getGenerativeModel({ model: modelName });
-  const result = await model.generateContent({
-    contents: [{ role: "user", parts: contents }],
-    generationConfig: { maxOutputTokens: 4096 },
-  });
-  return result.response.text();
-};
 
 router.post("/report/:id", auth, async (req, res) => {
   try {
@@ -64,17 +50,37 @@ router.post("/report/:id", auth, async (req, res) => {
     let mimeType;
 
     try {
-      const response = await axios.get(report.url, {
-        responseType: "arraybuffer",
-      });
+      let fileBuffer;
 
-      // Extract mime type from response headers
-      mimeType = response.headers["content-type"] || "application/octet-stream";
+      // Check if report.url points to a local upload
+      if (report.url.startsWith("/uploads") || report.url.startsWith("uploads") || !report.url.startsWith("http")) {
+        const localPath = path.isAbsolute(report.url)
+          ? report.url
+          : path.join(__dirname, "../../", report.url.replace(/^\//, ""));
+        if (fs.existsSync(localPath)) {
+          fileBuffer = fs.readFileSync(localPath);
+          mimeType = report.fileType || report.contentType || "image/jpeg";
+          console.log("📥 Loaded file from local storage:", localPath);
+        }
+      }
 
-      // Ensure we have a proper buffer
-      let fileBuffer = Buffer.isBuffer(response.data)
-        ? response.data
-        : Buffer.from(response.data);
+      if (!fileBuffer) {
+        const fetchUrl = report.url.startsWith("http")
+          ? report.url
+          : `http://localhost:${process.env.PORT || 5000}${report.url.startsWith("/") ? "" : "/"}${report.url}`;
+
+        const response = await axios.get(fetchUrl, {
+          responseType: "arraybuffer",
+        });
+
+        // Extract mime type from response headers
+        mimeType = response.headers["content-type"] || "application/octet-stream";
+
+        // Ensure we have a proper buffer
+        fileBuffer = Buffer.isBuffer(response.data)
+          ? response.data
+          : Buffer.from(response.data);
+      }
 
       console.log(
         "📥 File downloaded. Size:",
@@ -157,7 +163,7 @@ router.post("/report/:id", auth, async (req, res) => {
         }
       }
 
-      // Convert buffer to base64 for the Hugging Face vision model.
+      // Convert buffer to base64 for the Groq vision model.
       base64Image = fileBuffer.toString("base64");
 
       // Validate base64 conversion
@@ -182,11 +188,12 @@ router.post("/report/:id", auth, async (req, res) => {
       });
     }
 
-    // STEP 2: AI 1 extracts report text from the image.
-    if (!process.env.GEMINI_API_KEY) {
+    // STEP 2: AI 1 extracts report text from the image using the configured
+    // Groq vision key, then AI 2 analyzes that text with Hugging Face.
+    if (!process.env.GROQ_API_KEY && !process.env.HF_TOKEN) {
       return res.status(500).json({
         msg: "AI analysis is not configured on the server.",
-        error: "Set GEMINI_API_KEY in the backend environment.",
+        error: "Set GROQ_API_KEY or HF_TOKEN in the backend environment.",
       });
     }
 
@@ -196,11 +203,13 @@ Preserve test names, values, units, reference ranges, dates, headings, and other
 
     let extractedText;
     try {
-      console.log("🤖 AI 1: sending report image to Gemini vision...");
-      extractedText = await getGeminiResponse(GEMINI_VISION_MODEL, [
-        { text: extractionPrompt },
-        { inlineData: { mimeType, data: base64Image } },
-      ]);
+      console.log("🤖 AI 1: sending report image to Groq vision...");
+      extractedText = await callGrokVision(
+        base64Image,
+        mimeType,
+        extractionPrompt,
+        4096,
+      );
 
       if (!extractedText || !extractedText.trim()) {
         throw new Error("Vision model returned empty extracted text");
@@ -212,10 +221,13 @@ Preserve test names, values, units, reference ranges, dates, headings, and other
         extractedText.length,
       );
     } catch (visionError) {
-      const providerError =
+      let providerError =
         visionError.response?.data?.error ||
         visionError.message ||
         "Unknown vision model error";
+      if (typeof providerError !== "string") {
+        providerError = providerError.message || JSON.stringify(providerError);
+      }
       console.error("❌ AI 1 vision error:", providerError);
       return res.status(502).json({
         msg: "Failed to extract text from the medical report.",
@@ -243,12 +255,42 @@ Include any other relevant sections needed to cover the report completely. Expla
 Do not include a note, disclaimer, or statement that this is not a diagnosis; the application provides its own disclaimer.
 Return plain text only. Do not use Markdown headings, hashtags, asterisks, or decorative formatting.`;
 
-    // STEP 3: AI 2 analyzes only the text extracted by AI 1.
+    // STEP 3: AI 2 analyzes the extracted text.
     try {
-      console.log("🤖 AI 2: sending extracted report text to Gemini...");
-      const aiText = await getGeminiResponse(GEMINI_TEXT_MODEL, [
-        { text: `${analysisPrompt}\n\nExtracted medical report text:\n${extractedText}` },
-      ]);
+      console.log("🤖 AI 2: analyzing extracted report text...");
+      let aiText = null;
+
+      // Try Hugging Face first if HF_TOKEN is present
+      if (process.env.HF_TOKEN) {
+        try {
+          console.log("🤖 AI 2: attempting analysis with Hugging Face...");
+          aiText = await callHuggingFace(
+            [
+              {
+                role: "user",
+                content: `${analysisPrompt}\n\nExtracted medical report text:\n${extractedText}`,
+              },
+            ],
+            4096,
+          );
+        } catch (hfErr) {
+          console.warn("⚠️ Hugging Face analysis failed, falling back to Groq:", hfErr.message);
+        }
+      }
+
+      // If Hugging Face failed or was not configured, fallback to Groq text model
+      if (!aiText && process.env.GROQ_API_KEY) {
+        console.log("🤖 AI 2: analyzing extracted report text with Groq...");
+        aiText = await callGrok(
+          [
+            {
+              role: "user",
+              content: `${analysisPrompt}\n\nExtracted medical report text:\n${extractedText}`,
+            },
+          ],
+          4096,
+        );
+      }
 
       if (!aiText || !aiText.trim()) {
         throw new Error("Text model returned empty analysis");
@@ -264,10 +306,13 @@ Return plain text only. Do not use Markdown headings, hashtags, asterisks, or de
         analysis: cleanedAnalysis,
       });
     } catch (textError) {
-      const providerError =
+      let providerError =
         textError.response?.data?.error ||
         textError.message ||
         "Unknown text model error";
+      if (typeof providerError !== "string") {
+        providerError = providerError.message || JSON.stringify(providerError);
+      }
       console.error("❌ AI 2 text analysis error:", providerError);
       return res.status(502).json({
         msg: "Failed to analyze the extracted medical report text.",

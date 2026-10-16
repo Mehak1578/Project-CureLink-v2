@@ -1,10 +1,7 @@
-const { HfInference } = require('@huggingface/inference');
+const axios = require('axios');
 
 const HF_TOKEN = process.env.HF_TOKEN;
-// Use a free lightweight model supported by Hugging Face Serverless Inference API
-const HUGGINGFACE_MODEL = process.env.HUGGINGFACE_MODEL || 'HuggingFaceH4/zephyr-7b-beta';
-
-const hf = new HfInference(HF_TOKEN);
+const HUGGINGFACE_MODEL = process.env.HUGGINGFACE_MODEL || 'meta-llama/Llama-3.1-8B-Instruct';
 
 /**
  * Sends a conversation or prompt to Hugging Face Inference API.
@@ -20,17 +17,28 @@ async function callHuggingFace(messages, maxTokens = 500) {
       content: msg.content
     }));
 
-    const response = await hf.chatCompletion({
-      model: HUGGINGFACE_MODEL,
-      messages: formattedMessages,
-      max_tokens: maxTokens,
-      temperature: 0.7,
-    });
+    const response = await axios.post(
+      'https://router.huggingface.co/v1/chat/completions',
+      {
+        model: HUGGINGFACE_MODEL,
+        messages: formattedMessages,
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      }
+    );
 
-    return response.choices[0].message.content;
+    return response.data.choices[0].message.content;
   } catch (error) {
-    console.error('Hugging Face API Error:', error.message);
-    throw new Error(error.message || 'Failed to communicate with Hugging Face AI');
+    const errorMsg = error.response?.data?.error?.message || error.response?.data?.error || error.message;
+    console.error('Hugging Face API Error:', errorMsg);
+    throw new Error(typeof errorMsg === 'string' ? errorMsg : 'Failed to communicate with Hugging Face AI');
   }
 }
 

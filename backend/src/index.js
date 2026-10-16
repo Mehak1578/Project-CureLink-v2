@@ -34,6 +34,7 @@ app.use("/api/cases", require("./routes/cases"));
 app.use("/api/projects", require("./routes/projects"));
 app.use("/api/ai", require("./routes/ai"));
 app.get("/", (req, res) => res.send({ message: "CureLink API running" }));
+app.get("/favicon.ico", (req, res) => res.status(204).end());
 
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);

@@ -213,6 +213,14 @@ const QUICK_ACTIONS = [
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+const defaultMessages = [
+  {
+    role: 'assistant',
+    content: "Hi! I'm your CureLink AI Health Assistant. I can help you:\n\n• **Find doctors** and check availability\n• **Book appointments** through conversation\n• Answer **health and medicine questions**\n\nWhat can I help you with today?",
+    richData: null,
+  },
+];
+
 export default function AIHealthAssistant() {
   const { user } = useContext(AuthContext);
   const userKey = user?.id || user?._id || 'guest';
@@ -221,13 +229,6 @@ export default function AIHealthAssistant() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
-  const defaultMessages = [
-    {
-      role: 'assistant',
-      content: "Hi! I'm your CureLink AI Health Assistant. I can help you:\n\n• **Find doctors** and check availability\n• **Book appointments** through conversation\n• Answer **health and medicine questions**\n\nWhat can I help you with today?",
-      richData: null,
-    },
-  ];
 
   const readStoredMessages = useCallback(() => {
     try {
